@@ -50,14 +50,33 @@ char* get_hostname(char *url)
     return strndup(begin_host, len);
 }
 
-int main(int argc, char **argv)
+char *read_ssl_to_string(SSL *ssl)
 {
-    if(argc < 2)
-    {
-        fprintf(stderr, "ERROR: please provide a url\n");
-        return 1;
+    size_t capacity = 1024;
+    size_t size = 0;
+    char *buffer = malloc(capacity);
+    if (!buffer) return NULL;
+    char temp[1024];
+    int n;
+    while ((n = SSL_read(ssl, temp, sizeof(temp))) > 0) {
+        if (size + n + 1 > capacity) {
+            capacity *= 2; 
+            char *new_buf = realloc(buffer, capacity);
+            if (!new_buf) {
+                free(buffer);
+                return NULL;
+            }
+            buffer = new_buf;
+        }
+        memcpy(buffer + size, temp, n);
+        size += n;
     }
-    char *url = argv[1];
+    buffer[size] = '\0';
+    return buffer;
+}
+
+char *make_request(char* url)
+{
     char* hostname = get_hostname(url);
     struct addrinfo hints = {0};
     hints.ai_family = AF_INET;
@@ -113,18 +132,12 @@ int main(int argc, char **argv)
     char request[1024] = {0};
     sprintf(request, "%s\r\n", url);
     SSL_write(ssl, request, strlen(request));
-
-    char buffer[1024];
-    ssize_t n = SSL_read(ssl, buffer, sizeof(buffer));
-    while (n > 0) {
-        fwrite(buffer, 1, n, stdout);
-        n = SSL_read(ssl, buffer, sizeof(buffer));
-    }
-
+    char *buffer = read_ssl_to_string(ssl);
     SSL_set_shutdown(ssl, SSL_RECEIVED_SHUTDOWN | SSL_SENT_SHUTDOWN);
     SSL_shutdown(ssl);
     SSL_free(ssl);
     SSL_CTX_free(ctx);
     close(sd);
-    return 0;
+    return buffer;
 }
+
