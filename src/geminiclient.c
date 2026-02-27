@@ -25,12 +25,6 @@
 // gemini://geminiprotocol.net/
 #define PROTOCAL "gemini://"
 
-void hello()
-{
-    printf("hello world\n");
-    return;
-}
-
 char* get_hostname(char *url)
 {
     size_t prot_len = strlen(PROTOCAL);
