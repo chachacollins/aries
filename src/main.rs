@@ -10,6 +10,7 @@ use ratatui::{
     widgets::{Block, Borders, Clear, Paragraph, Widget},
 };
 use std::io;
+use std::time::{Instant, Duration};
 
 #[derive(Debug, Default, PartialEq)]
 enum Page {
@@ -22,6 +23,7 @@ enum Page {
 
 const BG_COLOR: Color = Color::Rgb(10, 10, 16);
 const FG_COLOR: Color = Color::Rgb(216, 166, 87);
+
 
 fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
     let popup_layout = Layout::default()
@@ -104,13 +106,20 @@ impl App {
             height: logo_height,
             ..area
         };
-        Paragraph::new(logo).centered().render(vertical_center, buf);
+        Block::default()
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(Color::Rgb(137, 180, 130)))
+            .style(Style::default().bg(BG_COLOR))
+            .render(area, buf);
+        Paragraph::new(logo)
+            .centered().render(vertical_center, buf);
         let help = Line::from(Span::styled(
             "Press <Ctrl-h> to view the help",
             Style::default().fg(Color::Rgb(197,197,197)),
         ));
         let vertical_bottom = Rect {
-            y: area.y + area.height - 1,
+            y: area.y + area.height - 2,
+            x: 1,
             height: 1,
             ..area
         };

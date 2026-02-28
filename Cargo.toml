@@ -8,3 +8,9 @@ color-eyre = "0.6.3"
 crossterm = "0.29.0"
 ratatui = "0.30.0"
 ratatui-widgets = "0.3.0"
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true
