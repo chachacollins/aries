@@ -1,20 +1,32 @@
-use std::ffi::CString;
-use std::os::raw::c_char;
-unsafe extern "C" {
-    fn make_request(url: *const c_char) -> *mut c_char;
-}
+use openssl::ssl::{SslMethod, SslConnector,SslVerifyMode};
+use std::io::{Read, Write};
+use std::net::TcpStream;
 
-pub fn request(url: &str) -> Result<String, String> {
-    let url = CString::new(url).unwrap();
-    let res = unsafe { make_request(url.as_ptr()) };
-    if res.is_null() {
-        Err("request failed".to_string())
-    } else {
-        let res = unsafe {
-            CString::from_raw(res)
-                .into_string()
-                .expect("invalid utf8 string received")
-        };
-        Ok(res)
+pub fn make_request(url: &str) -> Result<String, String> {
+    if !url.starts_with("gemini://") {
+        return Err("give a url with gemini protocal prefix".to_string());
     }
+    let hostname = match url.strip_prefix("gemini://").unwrap().split('/').next() {
+        Some(h) => h,
+        None => return Err("hostname does not have a terminating slash".to_string()),
+    };
+    let mut configure = match SslConnector::builder(SslMethod::tls()) {
+        Ok(s) => s,
+        Err(_) => return Err("failed to create ssl connector builder".to_string()),
+    };
+    //NOTE: gemini uses TOFU which I'm too lazy to implement
+    configure.set_verify(SslVerifyMode::NONE);
+    let connector = configure.build();
+    let stream = match TcpStream::connect(format!("{hostname}:1965")) {
+        Ok(s) => s,
+        Err(_) => return Err("failed to connect to host".to_string()),
+    };
+    let mut stream = match connector.connect(hostname, stream) {
+        Ok(s) => s,
+        Err(_) => return Err("failed to create ssl connection".to_string()),
+    };
+    stream.write_all(format!("{url}\r\n").as_bytes()).unwrap();
+    let mut res = vec![];
+    stream.read_to_end(&mut res).unwrap();
+    Ok(String::from_utf8_lossy(&res).to_string())
 }
