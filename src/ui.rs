@@ -1,4 +1,6 @@
 use crate::aries_logo;
+use tui_input::Input;
+use tui_input::backend::crossterm::EventHandler;
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use ratatui::{
     DefaultTerminal, Frame,
@@ -21,7 +23,7 @@ enum Page {
 }
 
 const BG_COLOR: Color = Color::Rgb(10, 10, 16);
-const FG_COLOR: Color = Color::Rgb(216, 166, 87);
+const FG_COLOR: Color = Color::Rgb(235, 219, 178);
 
 
 fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
@@ -43,11 +45,21 @@ fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
         .split(popup_layout[1])[1]
 }
 
+#[derive(Debug, PartialEq)]
+enum InputMode {
+    Normal,
+    Editing,
+}
+
 #[derive(Debug)]
 pub struct App {
     ssl_connection: SslConnector,
     current_page: Page,
     help_triggered: bool,
+    input: Input,
+    input_mode: InputMode,
+    input_area:Rect,
+    event: Event,
     exit: bool,
 }
 
@@ -57,24 +69,43 @@ impl App {
             ssl_connection,
             current_page: Page::Title,
             help_triggered: false,
+            input: Input::default(),
+            input_mode: InputMode::Normal,
+            event: Event::FocusLost,
+            input_area: Rect::default(),
             exit: false,
         }
     }
 
     pub fn run(&mut self, terminal: &mut DefaultTerminal) -> io::Result<()> {
         while !self.exit {
-            terminal.draw(|frame| self.draw(frame))?;
+            terminal.draw(|frame|{ 
+                self.input_area = Rect {
+                    y: 1,
+                    x: 2,
+                    width: frame.area().width - 4,
+                    height: 3,
+                };
+                self.draw(frame)
+            })?;
             self.handle_events()?;
         }
         Ok(())
     }
 
-    fn draw(&self, frame: &mut Frame) {
+    fn draw(&mut self, frame: &mut Frame) {
+        let width = self.input_area.width.max(3) - 3;
+        let scroll = self.input.visual_scroll(width as usize);
+        if self.input_mode == InputMode::Editing {
+            let x = self.input.visual_cursor().max(scroll) - scroll + 1;
+            frame.set_cursor_position((self.input_area.x + x as u16, self.input_area.y + 1))
+        }
         frame.render_widget(self, frame.area());
     }
 
     fn handle_events(&mut self) -> io::Result<()> {
-        match event::read()? {
+        self.event = event::read()?;
+        match self.event {
             Event::Key(key_event) if key_event.kind == KeyEventKind::Press => {
                 self.handle_key_event(key_event)
             }
@@ -84,20 +115,44 @@ impl App {
     }
 
     fn handle_key_event(&mut self, key_event: KeyEvent) {
-        let key_code = key_event.code;
-        match key_code {
-            KeyCode::Char('c') => {
-                if key_event.modifiers.contains(KeyModifiers::CONTROL) {
-                    self.exit();
+        match self.input_mode {
+            InputMode::Normal => {
+                let key_code = key_event.code;
+                match key_code {
+                    KeyCode::Char('c') => {
+                        if key_event.modifiers.contains(KeyModifiers::CONTROL) {
+                            self.exit();
+                        }
+                    }
+                    KeyCode::Char('h') => {
+                        if key_event.modifiers.contains(KeyModifiers::CONTROL) {
+                            self.help_triggered = !self.help_triggered;
+                        }
+                    }
+                    KeyCode::Char('g') => {
+                        if key_event.modifiers.contains(KeyModifiers::CONTROL) {
+                            self.input_mode = InputMode::Editing;
+                        }
+                    }
+                    _ => {}
                 }
             }
-            KeyCode::Char('h') => {
-                if key_event.modifiers.contains(KeyModifiers::CONTROL) {
-                    self.help_triggered = !self.help_triggered;
+            InputMode::Editing => match key_event.code {
+                KeyCode::Enter => self.make_request(),
+                KeyCode::Esc => self.stop_editing(),
+                _ => {
+                    self.input.handle_event(&self.event);
                 }
-            }
-            _ => {}
+            },
         }
+    }
+
+    fn stop_editing(&mut self) {
+        self.input_mode = InputMode::Normal;
+    }
+
+    fn make_request(&self) {
+        todo!()
     }
 
     fn exit(&mut self) {
@@ -109,7 +164,7 @@ impl App {
         for line in aries_logo::LOGO.lines() {
             lines.push(Line::from(Span::styled(
                 line,
-                Style::default().fg(FG_COLOR),
+                Style::default().fg(Color::Red),
             )));
         }
         let logo_height = lines.len() as u16;
@@ -149,16 +204,42 @@ impl App {
             .style(Style::default().bg(BG_COLOR));
         let lines = vec![
             Line::from("<Ctrl-h> - Toggle the help menu"),
-            Line::from("<Ctrl-g> - Toggle the url bar"),
+            Line::from("<Ctrl-g> - Start editing the url"),
+            Line::from("<Esc>    - Stop editing the url"),
             Line::from("<Ctrl-c> - Quit the app"),
         ];
         let text = Text::from(lines);
-        Paragraph::new(text).block(block).render(area, buf);
+        Paragraph::new(text)
+            .style(Style::default().bg(BG_COLOR).fg(FG_COLOR))
+            .block(block)
+            .render(area, buf);
+    }
+
+    fn render_input(&mut self, area: Rect, buf: &mut Buffer) {
+        let width = self.input_area.width.max(3) - 3;
+        let scroll = self.input.visual_scroll(width as usize);
+        let style = match self.input_mode {
+            InputMode::Normal => Style::default(),
+            InputMode::Editing => FG_COLOR.into(),
+        };
+        let block = Block::default()
+            .title("url".bold().into_centered_line())
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(Color::Rgb(125, 174, 163)))
+            .style(Style::default().bg(BG_COLOR));
+        let input = Paragraph::new(self.input.value())
+            .style(style)
+            .scroll((0, scroll as u16))
+            .block(block);
+        input.render(self.input_area, buf);
     }
 }
 
-impl Widget for &App {
+impl Widget for &mut App {
     fn render(self, area: Rect, buf: &mut Buffer) {
+        if self.input_mode == InputMode::Editing {
+            self.render_input(area, buf);
+        }
         match self.current_page {
             Page::Title => self.render_title_page(area, buf),
             _ => {}
