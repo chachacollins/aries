@@ -9,6 +9,7 @@ use ratatui::{
     widgets::{Block, Borders, Clear, Paragraph, Widget},
 };
 use std::io;
+use openssl::ssl::SslConnector;
 
 #[derive(Debug, Default, PartialEq)]
 enum Page {
@@ -42,14 +43,24 @@ fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
         .split(popup_layout[1])[1]
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct App {
+    ssl_connection: SslConnector,
     current_page: Page,
     help_triggered: bool,
     exit: bool,
 }
 
 impl App {
+    pub fn new(ssl_connection: SslConnector) -> Self {
+        Self {
+            ssl_connection,
+            current_page: Page::Title,
+            help_triggered: false,
+            exit: false,
+        }
+    }
+
     pub fn run(&mut self, terminal: &mut DefaultTerminal) -> io::Result<()> {
         while !self.exit {
             terminal.draw(|frame| self.draw(frame))?;

@@ -1,8 +1,8 @@
-use openssl::ssl::{SslMethod, SslConnector,SslVerifyMode};
+use openssl::ssl::SslConnector;
 use std::io::{Read, Write};
 use std::net::TcpStream;
 
-pub fn make_request(url: &str) -> Result<String, String> {
+pub fn make_request(connector: &SslConnector, url: &str) -> Result<String, String> {
     if !url.starts_with("gemini://") {
         return Err("give a url with gemini protocal prefix".to_string());
     }
@@ -10,13 +10,6 @@ pub fn make_request(url: &str) -> Result<String, String> {
         Some(h) => h,
         None => return Err("hostname does not have a terminating slash".to_string()),
     };
-    let mut configure = match SslConnector::builder(SslMethod::tls()) {
-        Ok(s) => s,
-        Err(_) => return Err("failed to create ssl connector builder".to_string()),
-    };
-    //NOTE: gemini uses TOFU which I'm too lazy to implement
-    configure.set_verify(SslVerifyMode::NONE);
-    let connector = configure.build();
     let stream = match TcpStream::connect(format!("{hostname}:1965")) {
         Ok(s) => s,
         Err(_) => return Err("failed to connect to host".to_string()),
