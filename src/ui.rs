@@ -13,13 +13,9 @@ use ratatui::{
 use std::io;
 use openssl::ssl::SslConnector;
 
-#[derive(Debug, Default, PartialEq)]
+#[derive(Debug,PartialEq)]
 enum Page {
-    #[default]
     Title,
-    Browse,
-    Search,
-    Help,
 }
 
 const BG_COLOR: Color = Color::Rgb(10, 10, 16);
@@ -45,10 +41,18 @@ fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
         .split(popup_layout[1])[1]
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Default)]
 enum InputMode {
+    #[default]
     Normal,
     Editing,
+}
+
+#[derive(Default, Debug)]
+struct Url {
+    input: Input,
+    input_mode: InputMode,
+    input_area:Rect,
 }
 
 #[derive(Debug)]
@@ -56,11 +60,9 @@ pub struct App {
     ssl_connection: SslConnector,
     current_page: Page,
     help_triggered: bool,
-    input: Input,
-    input_mode: InputMode,
-    input_area:Rect,
     event: Event,
     exit: bool,
+    url: Url,
 }
 
 impl App {
@@ -69,10 +71,8 @@ impl App {
             ssl_connection,
             current_page: Page::Title,
             help_triggered: false,
-            input: Input::default(),
-            input_mode: InputMode::Normal,
             event: Event::FocusLost,
-            input_area: Rect::default(),
+            url: Url::default(),
             exit: false,
         }
     }
@@ -80,12 +80,7 @@ impl App {
     pub fn run(&mut self, terminal: &mut DefaultTerminal) -> io::Result<()> {
         while !self.exit {
             terminal.draw(|frame|{ 
-                self.input_area = Rect {
-                    y: 1,
-                    x: 2,
-                    width: frame.area().width - 4,
-                    height: 3,
-                };
+                self.calculate_url_input_size(frame.area());
                 self.draw(frame)
             })?;
             self.handle_events()?;
@@ -94,11 +89,11 @@ impl App {
     }
 
     fn draw(&mut self, frame: &mut Frame) {
-        let width = self.input_area.width.max(3) - 3;
-        let scroll = self.input.visual_scroll(width as usize);
-        if self.input_mode == InputMode::Editing {
-            let x = self.input.visual_cursor().max(scroll) - scroll + 1;
-            frame.set_cursor_position((self.input_area.x + x as u16, self.input_area.y + 1))
+        let width = self.url.input_area.width.max(3) - 3;
+        let scroll = self.url.input.visual_scroll(width as usize);
+        if self.url.input_mode == InputMode::Editing {
+            let x = self.url.input.visual_cursor().max(scroll) - scroll + 1;
+            frame.set_cursor_position((self.url.input_area.x + x as u16, self.url.input_area.y + 1))
         }
         frame.render_widget(self, frame.area());
     }
@@ -115,7 +110,7 @@ impl App {
     }
 
     fn handle_key_event(&mut self, key_event: KeyEvent) {
-        match self.input_mode {
+        match self.url.input_mode {
             InputMode::Normal => {
                 let key_code = key_event.code;
                 match key_code {
@@ -131,7 +126,7 @@ impl App {
                     }
                     KeyCode::Char('g') => {
                         if key_event.modifiers.contains(KeyModifiers::CONTROL) {
-                            self.input_mode = InputMode::Editing;
+                            self.url.input_mode = InputMode::Editing;
                         }
                     }
                     _ => {}
@@ -141,14 +136,14 @@ impl App {
                 KeyCode::Enter => self.make_request(),
                 KeyCode::Esc => self.stop_editing(),
                 _ => {
-                    self.input.handle_event(&self.event);
+                    self.url.input.handle_event(&self.event);
                 }
             },
         }
     }
 
     fn stop_editing(&mut self) {
-        self.input_mode = InputMode::Normal;
+        self.url.input_mode = InputMode::Normal;
     }
 
     fn make_request(&self) {
@@ -158,6 +153,18 @@ impl App {
     fn exit(&mut self) {
         self.exit = true;
     }
+
+    fn calculate_url_input_size(&mut self, area: Rect) {
+        let width = (area.width as f32 * 0.80) as u16;
+        let x = (area.width - width)/2;
+        self.url.input_area = Rect {
+            y: 1,
+            x,
+            width,
+            height: 3,
+        };
+    }
+
     fn render_title_page(&self, area: Rect, buf: &mut Buffer) {
         buf.set_style(area, Style::default().bg(BG_COLOR));
         let mut lines = vec![];
@@ -215,10 +222,10 @@ impl App {
             .render(area, buf);
     }
 
-    fn render_input(&mut self, area: Rect, buf: &mut Buffer) {
-        let width = self.input_area.width.max(3) - 3;
-        let scroll = self.input.visual_scroll(width as usize);
-        let style = match self.input_mode {
+    fn render_input(&mut self, buf: &mut Buffer) {
+        let width = self.url.input_area.width.max(3) - 3;
+        let scroll = self.url.input.visual_scroll(width as usize);
+        let style = match self.url.input_mode {
             InputMode::Normal => Style::default(),
             InputMode::Editing => FG_COLOR.into(),
         };
@@ -227,26 +234,24 @@ impl App {
             .borders(Borders::ALL)
             .border_style(Style::default().fg(Color::Rgb(125, 174, 163)))
             .style(Style::default().bg(BG_COLOR));
-        let input = Paragraph::new(self.input.value())
+        let input = Paragraph::new(self.url.input.value())
             .style(style)
             .scroll((0, scroll as u16))
             .block(block);
-        input.render(self.input_area, buf);
+        input.render(self.url.input_area, buf);
     }
 }
 
 impl Widget for &mut App {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        if self.input_mode == InputMode::Editing {
-            self.render_input(area, buf);
+        if self.url.input_mode == InputMode::Editing {
+            self.render_input(buf);
         }
         match self.current_page {
             Page::Title => self.render_title_page(area, buf),
-            _ => {}
         }
         if self.help_triggered {
             self.render_help_page(area, buf);
         }
     }
 }
-
