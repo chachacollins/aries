@@ -9,7 +9,7 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Style, Stylize},
     text::{Line, Span, Text},
-    widgets::{Block, Borders, Clear, Paragraph, Widget},
+    widgets::{Block, Borders, Clear, Paragraph, Widget, Wrap},
 };
 use std::io;
 use openssl::ssl::SslConnector;
@@ -216,23 +216,26 @@ impl App {
         for line in self.page_content.lines() {
             lines.push(Line::from(Span::styled(
                 line,
-                Style::default().fg(Color::Yellow),
+                Style::default().fg(FG_COLOR),
             )));
         }
         let text_height = lines.len() as u16;
         let text = Text::from(lines);
-        let vertical_center = Rect {
-            y: area.y + (area.height / 2).saturating_sub(text_height / 2),
-            height: text_height,
-            ..area
-        };
         Block::default()
             .borders(Borders::ALL)
             .border_style(Style::default().fg(Color::Rgb(137, 180, 130)))
             .style(Style::default().bg(BG_COLOR))
             .render(area, buf);
+        let area = Rect {
+            x: 1,
+            y: 1,
+            width: area.width - 3,
+            ..area
+        };
+        //TODO: add scrolling using vim motions
         Paragraph::new(text)
-            .centered().render(vertical_center, buf);
+            .wrap(Wrap { trim: true })
+            .render(area, buf);
     }
 
     fn render_help_page(&self, area: Rect, buf: &mut Buffer) {
