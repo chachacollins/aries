@@ -260,6 +260,7 @@ impl App {
     }
 
     fn render_input(&mut self, buf: &mut Buffer) {
+        Clear.render(self.url.input_area, buf);
         let width = self.url.input_area.width.max(3) - 3;
         let scroll = self.url.input.visual_scroll(width as usize);
         let style = match self.url.input_mode {
@@ -281,15 +282,15 @@ impl App {
 
 impl Widget for &mut App {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        if self.url.input_mode == InputMode::Editing {
-            self.render_input(buf);
-        }
         match self.current_page {
             Page::Title => self.render_title_page(area, buf),
             Page::Browse => self.render_browse_page(area, buf),
         }
         if self.help_triggered {
             self.render_help_page(area, buf);
+        }
+        if self.url.input_mode == InputMode::Editing {
+            self.render_input(buf);
         }
     }
 }
