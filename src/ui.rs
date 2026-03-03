@@ -1,4 +1,5 @@
 use crate::aries_logo;
+use crate::gemini;
 use tui_input::Input;
 use tui_input::backend::crossterm::EventHandler;
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
@@ -16,6 +17,7 @@ use openssl::ssl::SslConnector;
 #[derive(Debug,PartialEq)]
 enum Page {
     Title,
+    Browse,
 }
 
 const BG_COLOR: Color = Color::Rgb(10, 10, 16);
@@ -63,6 +65,7 @@ pub struct App {
     event: Event,
     exit: bool,
     url: Url,
+    page_content: String,
 }
 
 impl App {
@@ -74,6 +77,7 @@ impl App {
             event: Event::FocusLost,
             url: Url::default(),
             exit: false,
+            page_content: String::new(),
         }
     }
 
@@ -146,8 +150,13 @@ impl App {
         self.url.input_mode = InputMode::Normal;
     }
 
-    fn make_request(&self) {
-        todo!()
+    fn make_request(&mut self) {
+        let url = self.url.input.value_and_reset();
+        self.stop_editing();
+        self.page_content.clear();
+        //TODO: remove this unwrap and report the error to the user
+        self.page_content = gemini::make_request(&self.ssl_connection, &url).unwrap();
+        self.current_page = Page::Browse;
     }
 
     fn exit(&mut self) {
@@ -201,6 +210,31 @@ impl App {
         Paragraph::new(help).render(vertical_bottom, buf);
     }
 
+    fn render_browse_page(&self, area: Rect, buf: &mut Buffer) {
+        buf.set_style(area, Style::default().bg(BG_COLOR));
+        let mut lines = vec![];
+        for line in self.page_content.lines() {
+            lines.push(Line::from(Span::styled(
+                line,
+                Style::default().fg(Color::Yellow),
+            )));
+        }
+        let text_height = lines.len() as u16;
+        let text = Text::from(lines);
+        let vertical_center = Rect {
+            y: area.y + (area.height / 2).saturating_sub(text_height / 2),
+            height: text_height,
+            ..area
+        };
+        Block::default()
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(Color::Rgb(137, 180, 130)))
+            .style(Style::default().bg(BG_COLOR))
+            .render(area, buf);
+        Paragraph::new(text)
+            .centered().render(vertical_center, buf);
+    }
+
     fn render_help_page(&self, area: Rect, buf: &mut Buffer) {
         let area = centered_rect(60, 30, area);
         Clear.render(area, buf);
@@ -249,6 +283,7 @@ impl Widget for &mut App {
         }
         match self.current_page {
             Page::Title => self.render_title_page(area, buf),
+            Page::Browse => self.render_browse_page(area, buf),
         }
         if self.help_triggered {
             self.render_help_page(area, buf);
