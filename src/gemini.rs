@@ -33,11 +33,20 @@ pub struct Parser<'a> {
 
 fn parse_heading_line(line: &str) -> LineType {
     if line.starts_with("###") {
-        LineType::Heading(Heading {level:3, title: line.to_string()})
+        LineType::Heading(Heading {
+            level: 3,
+            title: line.to_string(),
+        })
     } else if line.starts_with("##") {
-        LineType::Heading(Heading {level:2, title: line.to_string()})
+        LineType::Heading(Heading {
+            level: 2,
+            title: line.to_string(),
+        })
     } else {
-        LineType::Heading(Heading {level:1, title: line.to_string()})
+        LineType::Heading(Heading {
+            level: 1,
+            title: line.to_string(),
+        })
     }
 }
 
@@ -49,7 +58,7 @@ fn parse_quote_line(line: &str) -> LineType {
     LineType::Quote(line.to_string())
 }
 
-fn parse_text_line(line: &str) -> LineType { 
+fn parse_text_line(line: &str) -> LineType {
     LineType::Text(line.to_string())
 }
 
@@ -73,25 +82,26 @@ impl<'a> Parser<'a> {
             .next()
             .expect("The server should always return a status line");
         for line in self.lines.by_ref() {
+            let line_bytes = line.as_bytes();
             if line.len() < 3 {
                 self.output.push(LineType::Text(String::new()));
                 continue;
             }
             if self.state == ParserState::Normal {
-                if line[0..3].trim() == "```" {
-                    self.state =  ParserState::Preformated;
+                if line_bytes[0..3] == *b"```" {
+                    self.state = ParserState::Preformated;
                     continue;
                 }
-                let pref = line[0..3].trim().chars().nth(0).unwrap();
+                let pref = line_bytes.iter().nth(0).unwrap();
                 match pref {
-                    '#' => self.output.push(parse_heading_line(line)),
-                    '=' => self.output.push(parse_link_line(line)),
-                    '*' => self.output.push(parse_list_line(line)),
-                    '>' => self.output.push(parse_quote_line(line)),
+                    b'#' => self.output.push(parse_heading_line(line)),
+                    b'=' => self.output.push(parse_link_line(line)),
+                    b'*' => self.output.push(parse_list_line(line)),
+                    b'>' => self.output.push(parse_quote_line(line)),
                     _ => self.output.push(parse_text_line(line)),
                 }
             } else {
-                if line[0..3].trim() == "```" {
+                if line_bytes[0..3] == *b"```" {
                     self.state = ParserState::Normal;
                 } else {
                     let mut pref_lines = Vec::new();

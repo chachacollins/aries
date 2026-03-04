@@ -29,7 +29,6 @@ const LINK_COLOR: Color = Color::Rgb(137, 180, 130);
 const QUOTE_COLOR: Color = Color::Rgb(146, 131, 116);
 const LIST_COLOR: Color = Color::Rgb(130, 131, 116);
 
-
 fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
     let popup_layout = Layout::default()
         .direction(Direction::Vertical)
@@ -219,9 +218,18 @@ impl App {
 
     fn style_heading(&self, heading: &gemini::Heading) -> Line<'_> {
         match heading.level {
-            1 => Line::from(Span::styled(heading.title.clone(), Style::default().fg(HEADING1_COLOR))),
-            2 => Line::from(Span::styled(heading.title.clone(), Style::default().fg(HEADING2_COLOR))),
-            3 => Line::from(Span::styled(heading.title.clone(), Style::default().fg(HEADING3_COLOR))),
+            1 => Line::from(Span::styled(
+                heading.title.clone(),
+                Style::default().fg(HEADING1_COLOR),
+            )),
+            2 => Line::from(Span::styled(
+                heading.title.clone(),
+                Style::default().fg(HEADING2_COLOR),
+            )),
+            3 => Line::from(Span::styled(
+                heading.title.clone(),
+                Style::default().fg(HEADING3_COLOR),
+            )),
             _ => unreachable!(),
         }
     }
@@ -264,7 +272,7 @@ impl App {
 
     fn render_browse_page(&self, area: Rect, buf: &mut Buffer) {
         buf.set_style(area, Style::default().bg(BG_COLOR));
-        let lines = self.style_line_types(); 
+        let lines = self.style_line_types();
         let text_height = lines.len() as u16;
         let text = Text::from(lines);
         Block::default()
