@@ -6,7 +6,7 @@ use ratatui::{
     DefaultTerminal, Frame,
     buffer::Buffer,
     layout::{Constraint, Direction, Layout, Rect},
-    style::{Color, Style, Stylize},
+    style::{Color, Modifier, Style, Stylize},
     text::{Line, Span, Text},
     widgets::{Block, Borders, Clear, Paragraph, Widget, Wrap},
 };
@@ -217,18 +217,19 @@ impl App {
     }
 
     fn style_heading(&self, heading: &gemini::Heading) -> Line<'_> {
+        let style = Style::default().add_modifier(Modifier::BOLD);
         match heading.level {
             1 => Line::from(Span::styled(
                 heading.title.clone(),
-                Style::default().fg(HEADING1_COLOR),
+                style.fg(HEADING1_COLOR),
             )),
             2 => Line::from(Span::styled(
                 heading.title.clone(),
-                Style::default().fg(HEADING2_COLOR),
+                style.fg(HEADING2_COLOR),
             )),
             3 => Line::from(Span::styled(
                 heading.title.clone(),
-                Style::default().fg(HEADING3_COLOR),
+                style.fg(HEADING3_COLOR),
             )),
             _ => unreachable!(),
         }
