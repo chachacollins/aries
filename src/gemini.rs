@@ -10,9 +10,15 @@ pub struct Heading {
 }
 
 #[derive(Debug)]
+pub struct Link {
+    pub alt: Option<String>,
+    pub link: String,
+}
+
+#[derive(Debug)]
 pub enum LineType {
     Text(String),
-    Link(String),
+    Link(Link),
     Heading(Heading),
     List(String),
     Quote(String),
@@ -51,7 +57,31 @@ fn parse_heading_line(line: &str) -> LineType {
 }
 
 fn parse_link_line(line: &str) -> LineType {
-    LineType::Link(line.to_string())
+    let mut link = String::new();
+    let mut alt = String::new();
+    let mut is_link = true;
+    let mut first_whitespace = true;
+    for c in line.chars() {
+        match c {
+            ' ' => {
+                if first_whitespace {
+                    first_whitespace = false;
+                } else {
+                    is_link = false;
+                }
+            }
+            _ => {
+                if is_link {
+                    link.push(c);
+                } else {
+                    alt.push(c);
+                }
+            }
+        }
+    }
+    let alt = if alt.len() > 0 { Some(alt) } else { None };
+    let link = Link { alt, link };
+    LineType::Link(link)
 }
 
 fn parse_quote_line(line: &str) -> LineType {

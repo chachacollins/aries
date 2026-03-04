@@ -25,8 +25,8 @@ const FG_COLOR: Color = Color::Rgb(235, 219, 178);
 const HEADING1_COLOR: Color = Color::Rgb(234, 105, 98);
 const HEADING2_COLOR: Color = Color::Rgb(216, 166, 87);
 const HEADING3_COLOR: Color = Color::Rgb(125, 174, 163);
+const QUOTE_COLOR: Color = Color::Rgb(137, 180, 130);
 const LINK_COLOR: Color = Color::Rgb(137, 180, 130);
-const QUOTE_COLOR: Color = Color::Rgb(146, 131, 116);
 const LIST_COLOR: Color = Color::Rgb(130, 131, 116);
 
 fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
@@ -235,8 +235,20 @@ impl App {
         }
     }
 
-    fn style_link(&self, link: String) -> Line<'_> {
-        Line::from(Span::styled(link, Style::default().fg(LINK_COLOR)))
+    fn style_link(&self, link: &gemini::Link) -> Line<'_> {
+        let style = Style::default()
+            .fg(LINK_COLOR)
+            .add_modifier(Modifier::ITALIC | Modifier::UNDERLINED)
+            .underline_color(LINK_COLOR);
+        let pref = "=> ".to_string();
+        let mut display_link = Vec::new();
+        display_link.push(Span::styled(pref, Style::default().fg(LINK_COLOR)));
+        if let Some(alt) = &link.alt {
+            display_link.push(Span::styled(alt.clone(), style));
+        } else {
+            display_link.push(Span::styled(link.link.clone(), style));
+        }
+        Line::from(display_link)
     }
 
     fn style_quote(&self, quote: String) -> Line<'_> {
@@ -257,7 +269,7 @@ impl App {
         for line in self.page_content.iter() {
             match line {
                 Heading(heading) => lines.push(self.style_heading(heading)),
-                Link(link) => lines.push(self.style_link(link.to_string())),
+                Link(link) => lines.push(self.style_link(link)),
                 List(list) => lines.push(self.style_list(list.to_string())),
                 Quote(quote) => lines.push(self.style_quote(quote.to_string())),
                 Preformat(preformated) => {
