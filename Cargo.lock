@@ -48,6 +48,7 @@ dependencies = [
  "ratatui",
  "ratatui-widgets",
  "tui-input",
+ "tui-scrollview",
 ]
 
 [[package]]
@@ -1613,6 +1614,17 @@ checksum = "79c1ee964298f136020f5f69e0e601f4d3a1f610a7baf1af9fcb96152e8a2c45"
 dependencies = [
  "ratatui",
  "unicode-width",
+]
+
+[[package]]
+name = "tui-scrollview"
+version = "0.6.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c8ada5290cf63e5e718a13111020398979975d4df556a55ae88014aa8850f171"
+dependencies = [
+ "indoc",
+ "ratatui-core",
+ "ratatui-widgets",
 ]
 
 [[package]]

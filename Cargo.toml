@@ -10,6 +10,7 @@ ratatui = "0.30.0"
 ratatui-widgets = "0.3.0"
 openssl = { version = "0.10", features = ["vendored"] }
 tui-input = "0.15.0"
+tui-scrollview = "0.6.2"
 
 [profile.release]
 codegen-units = 1

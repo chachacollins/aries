@@ -5,14 +5,16 @@ use openssl::ssl::SslConnector;
 use ratatui::{
     DefaultTerminal, Frame,
     buffer::Buffer,
-    layout::{Constraint, Direction, Layout, Rect},
+    layout::{Constraint, Direction, Layout, Rect, Size},
     style::{Color, Modifier, Style, Stylize},
     text::{Line, Span, Text},
     widgets::{Block, Borders, Clear, Paragraph, Widget, Wrap},
+    prelude::StatefulWidget,
 };
 use std::io;
 use tui_input::Input;
 use tui_input::backend::crossterm::EventHandler;
+use tui_scrollview::{ScrollViewState, ScrollView};
 
 #[derive(Debug, PartialEq)]
 enum Page {
@@ -71,6 +73,16 @@ pub struct App {
     exit: bool,
     url: Url,
     page_content: Vec<gemini::LineType>,
+    scroll_state: ScrollViewState,
+}
+
+fn sanitize_url(url: String) -> String {
+    let mut url = url;
+    if !url.starts_with("gemini://") {
+        url.insert_str(0, "gemini://");
+    }
+    url.push('/');
+    url
 }
 
 impl App {
@@ -83,6 +95,7 @@ impl App {
             url: Url::default(),
             exit: false,
             page_content: Vec::new(),
+            scroll_state: ScrollViewState::default(),
         }
     }
 
@@ -128,6 +141,9 @@ impl App {
                             self.exit();
                         }
                     }
+                    KeyCode::Char('j') => self.scroll_state.scroll_down(),
+                    KeyCode::Char('k') => self.scroll_state.scroll_up(),
+                    KeyCode::Char('G') => self.scroll_state.scroll_to_bottom(),
                     KeyCode::Char('h') => {
                         if key_event.modifiers.contains(KeyModifiers::CONTROL) {
                             self.help_triggered = !self.help_triggered;
@@ -136,6 +152,8 @@ impl App {
                     KeyCode::Char('g') => {
                         if key_event.modifiers.contains(KeyModifiers::CONTROL) {
                             self.url.input_mode = InputMode::Editing;
+                        } else {
+                            self.scroll_state.scroll_to_top();
                         }
                     }
                     _ => {}
@@ -156,7 +174,7 @@ impl App {
     }
 
     fn make_request(&mut self) {
-        let url = self.url.input.value_and_reset();
+        let url = sanitize_url(self.url.input.value_and_reset());
         self.stop_editing();
         //TODO: remove this unwrap and report the error to the user
         let res = gemini::make_request(&self.ssl_connection, &url).unwrap();
@@ -264,44 +282,44 @@ impl App {
     }
 
     fn style_line_types(&self) -> Vec<Line<'_>> {
-        use gemini::LineType::*;
+        use gemini::LineType;
         let mut lines = vec![];
         for line in self.page_content.iter() {
             match line {
-                Heading(heading) => lines.push(self.style_heading(heading)),
-                Link(link) => lines.push(self.style_link(link)),
-                List(list) => lines.push(self.style_list(list.to_string())),
-                Quote(quote) => lines.push(self.style_quote(quote.to_string())),
-                Preformat(preformated) => {
+                LineType::Heading(heading) => lines.push(self.style_heading(heading)),
+                LineType::Link(link) => lines.push(self.style_link(link)),
+                LineType::List(list) => lines.push(self.style_list(list.to_string())),
+                LineType::Quote(quote) => lines.push(self.style_quote(quote.to_string())),
+                LineType::Preformat(preformated) => {
                     for formated in preformated {
                         lines.push(Line::from(formated.to_string()))
                     }
                 }
-                Text(text) => lines.push(self.style_text(text.to_string())),
+                LineType::Text(text) => lines.push(self.style_text(text.to_string())),
             }
         }
         lines
     }
 
-    fn render_browse_page(&self, area: Rect, buf: &mut Buffer) {
+    fn render_browse_page(&mut self, area: Rect, buf: &mut Buffer) {
         buf.set_style(area, Style::default().bg(BG_COLOR));
         let lines = self.style_line_types();
         let text_height = lines.len() as u16;
         let text = Text::from(lines);
+        let mut scroll_view = ScrollView::new(Size::new(area.width, text_height));
+        let p_area = Rect {
+            x: 1,
+            y: 1,
+            width: area.width - 3,
+            height: text_height,
+        };
+        let paragraph = Paragraph::new(text).wrap(Wrap { trim: true });
+        scroll_view.render_widget(paragraph, p_area);
+        scroll_view.render(area, buf, &mut self.scroll_state);
         Block::default()
             .borders(Borders::ALL)
             .border_style(Style::default().fg(Color::Rgb(137, 180, 130)))
             .style(Style::default().bg(BG_COLOR))
-            .render(area, buf);
-        let area = Rect {
-            x: 1,
-            y: 1,
-            width: area.width - 3,
-            ..area
-        };
-        ////TODO: add scrolling using vim motions
-        Paragraph::new(text)
-            .wrap(Wrap { trim: true })
             .render(area, buf);
     }
 
