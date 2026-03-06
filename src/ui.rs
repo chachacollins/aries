@@ -6,15 +6,15 @@ use ratatui::{
     DefaultTerminal, Frame,
     buffer::Buffer,
     layout::{Constraint, Direction, Layout, Rect, Size},
+    prelude::StatefulWidget,
     style::{Color, Modifier, Style, Stylize},
     text::{Line, Span, Text},
     widgets::{Block, Borders, Clear, Paragraph, Widget, Wrap},
-    prelude::StatefulWidget,
 };
 use std::io;
 use tui_input::Input;
 use tui_input::backend::crossterm::EventHandler;
-use tui_scrollview::{ScrollViewState, ScrollView};
+use tui_scrollview::{ScrollView, ScrollViewState};
 
 #[derive(Debug, PartialEq)]
 enum Page {
@@ -333,6 +333,10 @@ impl App {
             .style(Style::default().bg(BG_COLOR));
         let lines = vec![
             Line::from("<Ctrl-h> - Toggle the help menu"),
+            Line::from("<j>      - Scroll down text"),
+            Line::from("<k>      - Scroll up text"),
+            Line::from("<g>      - Scroll to the top of the text"),
+            Line::from("<G>      - Scroll to the bottom of the text"),
             Line::from("<Ctrl-g> - Start editing the url"),
             Line::from("<Esc>    - Stop editing the url"),
             Line::from("<Ctrl-c> - Quit the app"),
