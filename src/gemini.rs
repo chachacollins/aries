@@ -79,7 +79,7 @@ fn parse_link_line(line: &str) -> LineType {
             }
         }
     }
-    let alt = if alt.len() > 0 { Some(alt) } else { None };
+    let alt = if !alt.is_empty() { Some(alt) } else { None };
     let link = Link { alt, link };
     LineType::Link(link)
 }
@@ -122,7 +122,7 @@ impl<'a> Parser<'a> {
                     self.state = ParserState::Preformated;
                     continue;
                 }
-                let pref = line_bytes.iter().nth(0).unwrap();
+                let pref = line_bytes.first().unwrap();
                 match pref {
                     b'#' => self.output.push(parse_heading_line(line)),
                     b'=' => self.output.push(parse_link_line(line)),
@@ -130,14 +130,11 @@ impl<'a> Parser<'a> {
                     b'>' => self.output.push(parse_quote_line(line)),
                     _ => self.output.push(parse_text_line(line)),
                 }
+            } else if line_bytes[0..3] == *b"```" {
+                self.state = ParserState::Normal;
             } else {
-                if line_bytes[0..3] == *b"```" {
-                    self.state = ParserState::Normal;
-                } else {
-                    let mut pref_lines = Vec::new();
-                    pref_lines.push(line.to_string());
-                    self.output.push(LineType::Preformat(pref_lines));
-                }
+                let pref_lines = vec![line.to_string()];
+                self.output.push(LineType::Preformat(pref_lines));
             }
         }
     }
@@ -178,7 +175,7 @@ pub fn make_request(connector: &SslConnector, url: &str) -> Result<String, ReqEr
         Err(_) => return Err(ReqErr::Write),
     }
     let mut res = vec![];
-    if let Err(_) = stream.read_to_end(&mut res) {
+    if stream.read_to_end(&mut res).is_err() {
         return Err(ReqErr::Read);
     }
     Ok(String::from_utf8_lossy(&res).to_string())
