@@ -74,6 +74,7 @@ pub struct App {
     exit: bool,
     url: Url,
     page_content: Vec<gemini::LineType>,
+    page_url: String,
     scroll_state: ScrollViewState,
 }
 
@@ -95,6 +96,7 @@ impl App {
             event: Event::FocusLost,
             url: Url::default(),
             exit: false,
+            page_url: String::new(),
             page_content: Vec::new(),
             scroll_state: ScrollViewState::default(),
         }
@@ -175,10 +177,10 @@ impl App {
     }
 
     fn make_request(&mut self) {
-        let url = sanitize_url(self.url.input.value_and_reset());
+        self.page_url = sanitize_url(self.url.input.value_and_reset());
         self.stop_editing();
         //TODO: remove this unwrap and report the error to the user
-        match gemini::make_request(&self.ssl_connection, &url) {
+        match gemini::make_request(&self.ssl_connection, &self.page_url) {
             Ok(res) => {
                 let mut parser = gemini::Parser::new(&res);
                 parser.parse_gemtext();
@@ -378,32 +380,33 @@ impl App {
             .render(area, buf);
         Paragraph::new(logo).centered().render(vertical_center, buf);
         use gemini::ReqErr;
-        let err_str;
-        match err {
-            ReqErr::SslConnection => {
-                err_str = "Could not create an ssl connection to host";
-            }
+        let err_str = match err {
+            ReqErr::SslConnection => "Could not create an ssl connection to host".to_string(),
             ReqErr::HostConnection => {
-                err_str = "Could not establish connection to host. Are you sure the url is valid?"
+                format!(
+                    "Could not establish connection to host. Are you sure the url:{} is valid?",
+                    self.page_url
+                )
             }
-            ReqErr::MalformedUrl(url) => {
-                panic!("This should never happen: we have received a malformed url {url}");
+            ReqErr::MalformedUrl => {
+                panic!(
+                    "This should never happen: we have received a malformed url {}",
+                    self.page_url
+                );
             }
-            ReqErr::Read => {
-                err_str = "Could not read contents to a buffer. Buy more ram lol";
-            }
+            ReqErr::Read => "Could not read contents to a buffer. Buy more ram lol".to_string(),
             ReqErr::Write => {
-                err_str = "Could not write to the host. Might be a connection error somewhere.";
+                "Could not write to the host. Might be a connection error somewhere.".to_string()
             }
-        }
+        };
         let vertical_bottom = Rect {
             y: vertical_center.y + vertical_center.height,
-            x: (err_str.len() / 2) as u16,
+            x: ((area.width - err_str.len() as u16) / 2) as u16,
             height: 1,
             ..area
         };
-        let err_str = Line::from(Span::styled(err_str, Style::default().fg(Color::Red)));
-        Paragraph::new(err_str).render(vertical_bottom, buf);
+        let err_line = Line::from(Span::styled(err_str, Style::default().fg(Color::Red)));
+        Paragraph::new(err_line).render(vertical_bottom, buf);
     }
 
     fn render_input(&mut self, buf: &mut Buffer) {

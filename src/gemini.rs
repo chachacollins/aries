@@ -149,7 +149,7 @@ impl<'a> Parser<'a> {
 
 #[derive(Debug, PartialEq)]
 pub enum ReqErr {
-    MalformedUrl(String),
+    MalformedUrl,
     SslConnection,
     HostConnection,
     Read,
@@ -159,11 +159,11 @@ pub enum ReqErr {
 //TODO: refactor this error reporting
 pub fn make_request(connector: &SslConnector, url: &str) -> Result<String, ReqErr> {
     if !url.starts_with("gemini://") {
-        return Err(ReqErr::MalformedUrl(url.to_string()));
+        return Err(ReqErr::MalformedUrl);
     }
     let hostname = match url.strip_prefix("gemini://").unwrap().split('/').next() {
         Some(h) => h,
-        None => return Err(ReqErr::MalformedUrl(url.to_string())),
+        None => return Err(ReqErr::MalformedUrl),
     };
     let stream = match TcpStream::connect(format!("{hostname}:1965")) {
         Ok(s) => s,
