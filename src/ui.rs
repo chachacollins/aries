@@ -1,4 +1,4 @@
-use crate::aries_logo;
+use crate::aries_art;
 use crate::gemini;
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use openssl::ssl::SslConnector;
@@ -20,6 +20,7 @@ use tui_scrollview::{ScrollView, ScrollViewState};
 enum Page {
     Title,
     Browse,
+    Error(gemini::ReqErr),
 }
 
 const BG_COLOR: Color = Color::Rgb(10, 10, 16);
@@ -177,11 +178,17 @@ impl App {
         let url = sanitize_url(self.url.input.value_and_reset());
         self.stop_editing();
         //TODO: remove this unwrap and report the error to the user
-        let res = gemini::make_request(&self.ssl_connection, &url).unwrap();
-        let mut parser = gemini::Parser::new(&res);
-        parser.parse_gemtext();
-        self.page_content = parser.get_lines();
-        self.current_page = Page::Browse;
+        match gemini::make_request(&self.ssl_connection, &url) {
+            Ok(res) => {
+                let mut parser = gemini::Parser::new(&res);
+                parser.parse_gemtext();
+                self.page_content = parser.get_lines();
+                self.current_page = Page::Browse;
+            }
+            Err(err) => {
+                self.current_page = Page::Error(err);
+            }
+        }
     }
 
     fn exit(&mut self) {
@@ -202,7 +209,7 @@ impl App {
     fn render_title_page(&self, area: Rect, buf: &mut Buffer) {
         buf.set_style(area, Style::default().bg(BG_COLOR));
         let mut lines = vec![];
-        for line in aries_logo::LOGO.lines() {
+        for line in aries_art::LOGO.lines() {
             lines.push(Line::from(Span::styled(
                 line,
                 Style::default().fg(Color::Red),
@@ -348,6 +355,57 @@ impl App {
             .render(area, buf);
     }
 
+    fn render_error_page(&self, area: Rect, buf: &mut Buffer, err: &gemini::ReqErr) {
+        buf.set_style(area, Style::default().bg(BG_COLOR));
+        let mut lines = vec![];
+        for line in aries_art::ERROR.lines() {
+            lines.push(Line::from(Span::styled(
+                line,
+                Style::default().fg(Color::Red),
+            )));
+        }
+        let logo_height = lines.len() as u16;
+        let logo = Text::from(lines);
+        let vertical_center = Rect {
+            y: area.y + (area.height / 2).saturating_sub(logo_height / 2),
+            height: logo_height,
+            ..area
+        };
+        Block::default()
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(Color::Rgb(137, 180, 130)))
+            .style(Style::default().bg(BG_COLOR))
+            .render(area, buf);
+        Paragraph::new(logo).centered().render(vertical_center, buf);
+        use gemini::ReqErr;
+        let err_str;
+        match err {
+            ReqErr::SslConnection => {
+                err_str = "Could not create an ssl connection to host";
+            }
+            ReqErr::HostConnection => {
+                err_str = "Could not establish connection to host. Are you sure the url is valid?"
+            }
+            ReqErr::MalformedUrl(url) => {
+                panic!("This should never happen: we have received a malformed url {url}");
+            }
+            ReqErr::Read => {
+                err_str = "Could not read contents to a buffer. Buy more ram lol";
+            }
+            ReqErr::Write => {
+                err_str = "Could not write to the host. Might be a connection error somewhere.";
+            }
+        }
+        let vertical_bottom = Rect {
+            y: vertical_center.y + vertical_center.height,
+            x: (err_str.len() / 2) as u16,
+            height: 1,
+            ..area
+        };
+        let err_str = Line::from(Span::styled(err_str, Style::default().fg(Color::Red)));
+        Paragraph::new(err_str).render(vertical_bottom, buf);
+    }
+
     fn render_input(&mut self, buf: &mut Buffer) {
         Clear.render(self.url.input_area, buf);
         let width = self.url.input_area.width.max(3) - 3;
@@ -371,9 +429,10 @@ impl App {
 
 impl Widget for &mut App {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        match self.current_page {
+        match &self.current_page {
             Page::Title => self.render_title_page(area, buf),
             Page::Browse => self.render_browse_page(area, buf),
+            Page::Error(err) => self.render_error_page(area, buf, err),
         }
         if self.help_triggered {
             self.render_help_page(area, buf);

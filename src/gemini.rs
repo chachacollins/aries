@@ -147,25 +147,39 @@ impl<'a> Parser<'a> {
     }
 }
 
+#[derive(Debug, PartialEq)]
+pub enum ReqErr {
+    MalformedUrl(String),
+    SslConnection,
+    HostConnection,
+    Read,
+    Write,
+}
+
 //TODO: refactor this error reporting
-pub fn make_request(connector: &SslConnector, url: &str) -> Result<String, String> {
+pub fn make_request(connector: &SslConnector, url: &str) -> Result<String, ReqErr> {
     if !url.starts_with("gemini://") {
-        return Err("give a url with gemini protocal prefix".to_string());
+        return Err(ReqErr::MalformedUrl(url.to_string()));
     }
     let hostname = match url.strip_prefix("gemini://").unwrap().split('/').next() {
         Some(h) => h,
-        None => return Err("hostname does not have a terminating slash".to_string()),
+        None => return Err(ReqErr::MalformedUrl(url.to_string())),
     };
     let stream = match TcpStream::connect(format!("{hostname}:1965")) {
         Ok(s) => s,
-        Err(_) => return Err("failed to connect to host".to_string()),
+        Err(_) => return Err(ReqErr::HostConnection),
     };
     let mut stream = match connector.connect(hostname, stream) {
         Ok(s) => s,
-        Err(_) => return Err("failed to create ssl connection".to_string()),
+        Err(_) => return Err(ReqErr::SslConnection),
     };
-    stream.write_all(format!("{url}\r\n").as_bytes()).unwrap();
+    match stream.write_all(format!("{url}\r\n").as_bytes()) {
+        Ok(_) => {}
+        Err(_) => return Err(ReqErr::Write),
+    }
     let mut res = vec![];
-    stream.read_to_end(&mut res).unwrap();
+    if let Err(_) = stream.read_to_end(&mut res) {
+        return Err(ReqErr::Read);
+    }
     Ok(String::from_utf8_lossy(&res).to_string())
 }

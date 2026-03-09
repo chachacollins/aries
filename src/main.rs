@@ -1,5 +1,5 @@
 use openssl::ssl::{SslConnector, SslMethod, SslVerifyMode};
-mod aries_logo;
+mod aries_art;
 mod gemini;
 mod ui;
 use crate::ui::App;
