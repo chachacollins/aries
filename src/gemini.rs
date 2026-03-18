@@ -9,10 +9,12 @@ pub struct Heading {
     pub level: u8,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Link {
     pub alt: Option<String>,
     pub link: String,
+    pub f_char: char,
+    pub is_relative: bool,
 }
 
 #[derive(Debug)]
@@ -56,31 +58,36 @@ fn parse_heading_line(line: &str) -> LineType {
     }
 }
 
-fn parse_link_line(line: &str) -> LineType {
+const F_CHARS: [char; 26] = {
+    let mut arr = [' '; 26];
+    let mut i = 0;
+    while i < 26 {
+        arr[i] = (b'a' + i as u8) as char;
+        i += 1;
+    }
+    arr
+};
+
+fn parse_link_line(line: &str, f_char_i: usize) -> LineType {
+    assert!(f_char_i < 26, "TODO: support more than 26 links on a page");
+    let line = line.strip_prefix("=>").unwrap();
     let mut link = String::new();
     let mut alt = String::new();
-    let mut is_link = true;
-    let mut first_whitespace = true;
-    for c in line.chars() {
-        match c {
-            ' ' => {
-                if first_whitespace {
-                    first_whitespace = false;
-                } else {
-                    is_link = false;
-                }
-            }
-            _ => {
-                if is_link {
-                    link.push(c);
-                } else {
-                    alt.push(c);
-                }
-            }
-        }
+    let parts: Vec<_> = line.split_whitespace().collect();
+    if parts.len() > 0 {
+        link = parts[0].to_string();
+    }
+    if parts.len() > 1 {
+        alt = parts[1..].join(" ");
     }
     let alt = if !alt.is_empty() { Some(alt) } else { None };
-    let link = Link { alt, link };
+    let is_relative = !link.starts_with("gemini://");
+    let link = Link {
+        alt,
+        link,
+        f_char: F_CHARS[f_char_i],
+        is_relative,
+    };
     LineType::Link(link)
 }
 
@@ -111,6 +118,7 @@ impl<'a> Parser<'a> {
             .lines
             .next()
             .expect("The server should always return a status line");
+        let mut f_char_i = 0;
         for line in self.lines.by_ref() {
             let line_bytes = line.as_bytes();
             if line.len() < 3 {
@@ -125,7 +133,10 @@ impl<'a> Parser<'a> {
                 let pref = line_bytes.first().unwrap();
                 match pref {
                     b'#' => self.output.push(parse_heading_line(line)),
-                    b'=' => self.output.push(parse_link_line(line)),
+                    b'=' => {
+                        self.output.push(parse_link_line(line, f_char_i));
+                        f_char_i += 1;
+                    }
                     b'*' => self.output.push(parse_list_line(line)),
                     b'>' => self.output.push(parse_quote_line(line)),
                     _ => self.output.push(parse_text_line(line)),

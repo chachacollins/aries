@@ -11,6 +11,7 @@ use ratatui::{
     text::{Line, Span, Text},
     widgets::{Block, Borders, Clear, Paragraph, Widget, Wrap},
 };
+use std::collections::HashMap;
 use std::io;
 use tui_input::Input;
 use tui_input::backend::crossterm::EventHandler;
@@ -32,6 +33,35 @@ const QUOTE_COLOR: Color = Color::Rgb(137, 180, 130);
 const LINK_COLOR: Color = Color::Rgb(137, 180, 130);
 const LIST_COLOR: Color = Color::Rgb(130, 131, 116);
 
+#[derive(Debug, PartialEq, Default)]
+enum InputMode {
+    #[default]
+    Normal,
+    Editing,
+    Follow,
+}
+
+#[derive(Default, Debug)]
+struct Url {
+    input: Input,
+    input_mode: InputMode,
+    input_area: Rect,
+}
+
+#[derive(Debug)]
+pub struct App {
+    ssl_connection: SslConnector,
+    current_page: Page,
+    help_triggered: bool,
+    event: Event,
+    exit: bool,
+    url: Url,
+    page_content: Vec<gemini::LineType>,
+    page_links: HashMap<char, gemini::Link>,
+    page_url: String,
+    scroll_state: ScrollViewState,
+}
+
 fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
     let popup_layout = Layout::default()
         .direction(Direction::Vertical)
@@ -51,33 +81,6 @@ fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
         .split(popup_layout[1])[1]
 }
 
-#[derive(Debug, PartialEq, Default)]
-enum InputMode {
-    #[default]
-    Normal,
-    Editing,
-}
-
-#[derive(Default, Debug)]
-struct Url {
-    input: Input,
-    input_mode: InputMode,
-    input_area: Rect,
-}
-
-#[derive(Debug)]
-pub struct App {
-    ssl_connection: SslConnector,
-    current_page: Page,
-    help_triggered: bool,
-    event: Event,
-    exit: bool,
-    url: Url,
-    page_content: Vec<gemini::LineType>,
-    page_url: String,
-    scroll_state: ScrollViewState,
-}
-
 fn sanitize_url(url: String) -> String {
     let mut url = url;
     if !url.starts_with("gemini://") {
@@ -85,6 +88,24 @@ fn sanitize_url(url: String) -> String {
     }
     url.push('/');
     url
+}
+
+fn calculate_wrapped_height(lines: &[Line], width: u16) -> u16 {
+    let mut total_height = 0u16;
+    for line in lines {
+        let line_width: usize = line
+            .spans
+            .iter()
+            .map(|span| span.content.chars().count())
+            .sum();
+        if line_width == 0 {
+            total_height += 1;
+        } else {
+            let rows = (line_width as u16).div_ceil(width);
+            total_height += rows;
+        }
+    }
+    total_height
 }
 
 impl App {
@@ -98,6 +119,7 @@ impl App {
             exit: false,
             page_url: String::new(),
             page_content: Vec::new(),
+            page_links: HashMap::new(),
             scroll_state: ScrollViewState::default(),
         }
     }
@@ -144,6 +166,7 @@ impl App {
                             self.exit();
                         }
                     }
+                    KeyCode::Char('f') => self.url.input_mode = InputMode::Follow,
                     KeyCode::Char('j') => self.scroll_state.scroll_down(),
                     KeyCode::Char('k') => self.scroll_state.scroll_up(),
                     KeyCode::Char('G') => self.scroll_state.scroll_to_bottom(),
@@ -162,6 +185,22 @@ impl App {
                     _ => {}
                 }
             }
+
+            InputMode::Follow => match key_event.code {
+                KeyCode::Esc => self.url.input_mode = InputMode::Normal,
+                KeyCode::Char(c) => {
+                    if let Some(link) = self.page_links.get(&c) {
+                        if link.is_relative {
+                            self.page_url = self.page_url.clone() + &link.link;
+                        } else {
+                            self.page_url = link.link.clone();
+                        }
+                        self.make_request();
+                    }
+                }
+                _ => {}
+            },
+
             InputMode::Editing => match key_event.code {
                 KeyCode::Enter => self.make_request(),
                 KeyCode::Esc => self.stop_editing(),
@@ -176,15 +215,32 @@ impl App {
         self.url.input_mode = InputMode::Normal;
     }
 
+    fn collect_links(&mut self) {
+        use gemini::LineType;
+        for line in &self.page_content {
+            match line {
+                LineType::Link(link) => {
+                    self.page_links.insert(link.f_char, link.clone());
+                }
+                _ => {}
+            }
+        }
+    }
+
     fn make_request(&mut self) {
-        self.page_url = sanitize_url(self.url.input.value_and_reset());
+        if self.url.input_mode == InputMode::Follow {
+            self.page_url = sanitize_url(self.page_url.clone());
+        } else {
+            self.page_url = sanitize_url(self.url.input.value_and_reset());
+        }
         self.stop_editing();
-        //TODO: remove this unwrap and report the error to the user
+        self.page_links.clear();
         match gemini::make_request(&self.ssl_connection, &self.page_url) {
             Ok(res) => {
                 let mut parser = gemini::Parser::new(&res);
                 parser.parse_gemtext();
                 self.page_content = parser.get_lines();
+                self.collect_links();
                 self.current_page = Page::Browse;
             }
             Err(err) => {
@@ -275,6 +331,11 @@ impl App {
         } else {
             display_link.push(Span::styled(link.link.clone(), style));
         }
+        if self.url.input_mode == InputMode::Follow {
+            let mut f_char = " ".to_string();
+            f_char.push(link.f_char);
+            display_link.push(f_char.fg(Color::Red));
+        }
         Line::from(display_link)
     }
 
@@ -312,24 +373,21 @@ impl App {
 
     fn render_browse_page(&mut self, area: Rect, buf: &mut Buffer) {
         buf.set_style(area, Style::default().bg(BG_COLOR));
-        let lines = self.style_line_types();
-        let text_height = lines.len() as u16;
-        let text = Text::from(lines);
-        let mut scroll_view = ScrollView::new(Size::new(area.width, text_height));
-        let p_area = Rect {
-            x: 1,
-            y: 1,
-            width: area.width - 3,
-            height: text_height,
-        };
-        let paragraph = Paragraph::new(text).wrap(Wrap { trim: true });
-        scroll_view.render_widget(paragraph, p_area);
-        scroll_view.render(area, buf, &mut self.scroll_state);
-        Block::default()
+        let block = Block::default()
             .borders(Borders::ALL)
             .border_style(Style::default().fg(Color::Rgb(137, 180, 130)))
-            .style(Style::default().bg(BG_COLOR))
-            .render(area, buf);
+            .style(Style::default().bg(BG_COLOR));
+        let inner_area = block.inner(area);
+        block.render(area, buf);
+        let lines = self.style_line_types();
+        let wrapped_height = calculate_wrapped_height(&lines, inner_area.width);
+        let text = Text::from(lines);
+        let mut scroll_view = ScrollView::new(Size::new(inner_area.width, wrapped_height));
+        let paragraph = Paragraph::new(text)
+            .wrap(Wrap { trim: true })
+            .style(Style::default().bg(BG_COLOR));
+        scroll_view.render_widget(paragraph, Rect::new(0, 0, inner_area.width, wrapped_height));
+        scroll_view.render(inner_area, buf, &mut self.scroll_state);
     }
 
     fn render_help_page(&self, area: Rect, buf: &mut Buffer) {
@@ -416,6 +474,7 @@ impl App {
         let style = match self.url.input_mode {
             InputMode::Normal => Style::default(),
             InputMode::Editing => FG_COLOR.into(),
+            InputMode::Follow => todo!("Technically we shouldn't even render the url bar"),
         };
         let block = Block::default()
             .title("url".bold().into_centered_line())
