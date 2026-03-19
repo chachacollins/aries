@@ -11,7 +11,7 @@ use ratatui::{
     text::{Line, Span, Text},
     widgets::{Block, Borders, Clear, Paragraph, Widget, Wrap},
 };
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::io;
 use tui_input::Input;
 use tui_input::backend::crossterm::EventHandler;
@@ -56,6 +56,7 @@ pub struct App {
     event: Event,
     exit: bool,
     url: Url,
+    prev_urls: VecDeque<String>,
     page_content: Vec<gemini::LineType>,
     page_links: HashMap<String, gemini::Link>,
     page_url: String,
@@ -121,6 +122,7 @@ impl App {
             page_url: String::new(),
             page_content: Vec::new(),
             page_links: HashMap::new(),
+            prev_urls: VecDeque::new(),
             f_chars: String::new(),
             scroll_state: ScrollViewState::default(),
         }
@@ -175,6 +177,9 @@ impl App {
                     KeyCode::Char('h') => {
                         if key_event.modifiers.contains(KeyModifiers::CONTROL) {
                             self.help_triggered = !self.help_triggered;
+                        } else if !self.prev_urls.is_empty() {
+                            self.page_url = self.prev_urls.pop_front().unwrap();
+                            self.make_request();
                         }
                     }
                     KeyCode::Char('g') => {
@@ -192,21 +197,20 @@ impl App {
                 KeyCode::Esc => self.url.input_mode = InputMode::Normal,
                 KeyCode::Char(a) => {
                     self.f_chars.push(a);
-                    if self.f_chars.len() == 2 {
-                        if let Some(link) = self.page_links.get(&self.f_chars) {
-                            if link.is_relative {
-                                self.page_url = self.page_url.clone() + &link.link;
-                            } else {
-                                self.page_url = link.link.clone();
-                            }
-                            self.f_chars.clear();
-                            self.make_request();
+                    if self.f_chars.len() == 2
+                        && let Some(link) = self.page_links.get(&self.f_chars)
+                    {
+                        if link.is_relative {
+                            self.page_url = self.page_url.clone() + &link.link;
+                        } else {
+                            self.page_url = link.link.clone();
                         }
+                        self.f_chars.clear();
+                        self.make_request();
                     }
                 }
                 _ => {}
             },
-
             InputMode::Editing => match key_event.code {
                 KeyCode::Enter => self.make_request(),
                 KeyCode::Esc => self.stop_editing(),
@@ -224,21 +228,19 @@ impl App {
     fn collect_links(&mut self) {
         use gemini::LineType;
         for line in &self.page_content {
-            match line {
-                LineType::Link(link) => {
-                    self.page_links.insert(link.f_char.clone(), link.clone());
-                }
-                _ => {}
+            if let LineType::Link(link) = line {
+                self.page_links.insert(link.f_char.clone(), link.clone());
             }
         }
     }
 
     fn make_request(&mut self) {
-        if self.url.input_mode == InputMode::Follow {
-            self.page_url = sanitize_url(self.page_url.clone());
-        } else {
+        if self.url.input_mode == InputMode::Editing {
             self.page_url = sanitize_url(self.url.input.value_and_reset());
+        } else {
+            self.page_url = sanitize_url(self.page_url.clone());
         }
+        self.prev_urls.push_back(self.page_url.clone());
         self.stop_editing();
         self.page_links.clear();
         match gemini::make_request(&self.ssl_connection, &self.page_url) {

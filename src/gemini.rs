@@ -58,7 +58,7 @@ fn parse_heading_line(line: &str) -> LineType {
     }
 }
 
-const F_CHARS: [&'static str; 300] = [
+const F_CHARS: [&str; 300] = [
     "ab", "ac", "bc", "ad", "bd", "cd", "ae", "be", "ce", "de", "af", "bf", "cf", "df", "ef", "ag",
     "bg", "cg", "dg", "eg", "fg", "ah", "bh", "ch", "dh", "eh", "fh", "gh", "ai", "bi", "ci", "di",
     "ei", "fi", "gi", "hi", "aj", "bj", "cj", "dj", "ej", "fj", "gj", "hj", "ij", "ak", "bk", "ck",
@@ -85,7 +85,7 @@ fn parse_link_line(line: &str, f_char_i: usize) -> LineType {
     let mut link = String::new();
     let mut alt = String::new();
     let parts: Vec<_> = line.split_whitespace().collect();
-    if parts.len() > 0 {
+    if !parts.is_empty() {
         link = parts[0].to_string();
     }
     if parts.len() > 1 {
