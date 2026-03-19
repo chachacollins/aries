@@ -13,7 +13,7 @@ pub struct Heading {
 pub struct Link {
     pub alt: Option<String>,
     pub link: String,
-    pub f_char: char,
+    pub f_char: String,
     pub is_relative: bool,
 }
 
@@ -58,18 +58,29 @@ fn parse_heading_line(line: &str) -> LineType {
     }
 }
 
-const F_CHARS: [char; 26] = {
-    let mut arr = [' '; 26];
-    let mut i = 0;
-    while i < 26 {
-        arr[i] = (b'a' + i as u8) as char;
-        i += 1;
-    }
-    arr
-};
+const F_CHARS: [&'static str; 300] = [
+    "ab", "ac", "bc", "ad", "bd", "cd", "ae", "be", "ce", "de", "af", "bf", "cf", "df", "ef", "ag",
+    "bg", "cg", "dg", "eg", "fg", "ah", "bh", "ch", "dh", "eh", "fh", "gh", "ai", "bi", "ci", "di",
+    "ei", "fi", "gi", "hi", "aj", "bj", "cj", "dj", "ej", "fj", "gj", "hj", "ij", "ak", "bk", "ck",
+    "dk", "ek", "fk", "gk", "hk", "ik", "jk", "al", "bl", "cl", "dl", "el", "fl", "gl", "hl", "il",
+    "jl", "kl", "am", "bm", "cm", "dm", "em", "fm", "gm", "hm", "im", "jm", "km", "lm", "an", "bn",
+    "cn", "dn", "en", "fn", "gn", "hn", "in", "jn", "kn", "ln", "mn", "ao", "bo", "co", "do", "eo",
+    "fo", "go", "ho", "io", "jo", "ko", "lo", "mo", "no", "ap", "bp", "cp", "dp", "ep", "fp", "gp",
+    "hp", "ip", "jp", "kp", "lp", "mp", "np", "op", "aq", "bq", "cq", "dq", "eq", "fq", "gq", "hq",
+    "iq", "jq", "kq", "lq", "mq", "nq", "oq", "pq", "ar", "br", "cr", "dr", "er", "fr", "gr", "hr",
+    "ir", "jr", "kr", "lr", "mr", "nr", "or", "pr", "qr", "as", "bs", "cs", "ds", "es", "fs", "gs",
+    "hs", "is", "js", "ks", "ls", "ms", "ns", "os", "ps", "qs", "rs", "at", "bt", "ct", "dt", "et",
+    "ft", "gt", "ht", "it", "jt", "kt", "lt", "mt", "nt", "ot", "pt", "qt", "rt", "st", "au", "bu",
+    "cu", "du", "eu", "fu", "gu", "hu", "iu", "ju", "ku", "lu", "mu", "nu", "ou", "pu", "qu", "ru",
+    "su", "tu", "av", "bv", "cv", "dv", "ev", "fv", "gv", "hv", "iv", "jv", "kv", "lv", "mv", "nv",
+    "ov", "pv", "qv", "rv", "sv", "tv", "uv", "aw", "bw", "cw", "dw", "ew", "fw", "gw", "hw", "iw",
+    "jw", "kw", "lw", "mw", "nw", "ow", "pw", "qw", "rw", "sw", "tw", "uw", "vw", "ax", "bx", "cx",
+    "dx", "ex", "fx", "gx", "hx", "ix", "jx", "kx", "lx", "mx", "nx", "ox", "px", "qx", "rx", "sx",
+    "tx", "ux", "vx", "wx", "ay", "by", "cy", "dy", "ey", "fy", "gy", "hy", "iy", "jy", "ky", "ly",
+    "my", "ny", "oy", "py", "qy", "ry", "sy", "ty", "uy", "vy", "wy", "xy",
+];
 
 fn parse_link_line(line: &str, f_char_i: usize) -> LineType {
-    assert!(f_char_i < 26, "TODO: support more than 26 links on a page");
     let line = line.strip_prefix("=>").unwrap();
     let mut link = String::new();
     let mut alt = String::new();
@@ -85,7 +96,7 @@ fn parse_link_line(line: &str, f_char_i: usize) -> LineType {
     let link = Link {
         alt,
         link,
-        f_char: F_CHARS[f_char_i],
+        f_char: F_CHARS[f_char_i].to_string(),
         is_relative,
     };
     LineType::Link(link)

@@ -15,7 +15,7 @@ use std::collections::HashMap;
 use std::io;
 use tui_input::Input;
 use tui_input::backend::crossterm::EventHandler;
-use tui_scrollview::{ScrollView, ScrollViewState};
+use tui_scrollview::{ScrollView, ScrollViewState, ScrollbarVisibility};
 
 #[derive(Debug, PartialEq)]
 enum Page {
@@ -57,8 +57,9 @@ pub struct App {
     exit: bool,
     url: Url,
     page_content: Vec<gemini::LineType>,
-    page_links: HashMap<char, gemini::Link>,
+    page_links: HashMap<String, gemini::Link>,
     page_url: String,
+    f_chars: String,
     scroll_state: ScrollViewState,
 }
 
@@ -120,6 +121,7 @@ impl App {
             page_url: String::new(),
             page_content: Vec::new(),
             page_links: HashMap::new(),
+            f_chars: String::new(),
             scroll_state: ScrollViewState::default(),
         }
     }
@@ -188,14 +190,18 @@ impl App {
 
             InputMode::Follow => match key_event.code {
                 KeyCode::Esc => self.url.input_mode = InputMode::Normal,
-                KeyCode::Char(c) => {
-                    if let Some(link) = self.page_links.get(&c) {
-                        if link.is_relative {
-                            self.page_url = self.page_url.clone() + &link.link;
-                        } else {
-                            self.page_url = link.link.clone();
+                KeyCode::Char(a) => {
+                    self.f_chars.push(a);
+                    if self.f_chars.len() == 2 {
+                        if let Some(link) = self.page_links.get(&self.f_chars) {
+                            if link.is_relative {
+                                self.page_url = self.page_url.clone() + &link.link;
+                            } else {
+                                self.page_url = link.link.clone();
+                            }
+                            self.f_chars.clear();
+                            self.make_request();
                         }
-                        self.make_request();
                     }
                 }
                 _ => {}
@@ -220,7 +226,7 @@ impl App {
         for line in &self.page_content {
             match line {
                 LineType::Link(link) => {
-                    self.page_links.insert(link.f_char, link.clone());
+                    self.page_links.insert(link.f_char.clone(), link.clone());
                 }
                 _ => {}
             }
@@ -332,8 +338,7 @@ impl App {
             display_link.push(Span::styled(link.link.clone(), style));
         }
         if self.url.input_mode == InputMode::Follow {
-            let mut f_char = " ".to_string();
-            f_char.push(link.f_char);
+            let f_char = " ".to_owned() + &link.f_char.clone();
             display_link.push(f_char.fg(Color::Red));
         }
         Line::from(display_link)
@@ -382,7 +387,9 @@ impl App {
         let lines = self.style_line_types();
         let wrapped_height = calculate_wrapped_height(&lines, inner_area.width);
         let text = Text::from(lines);
-        let mut scroll_view = ScrollView::new(Size::new(inner_area.width, wrapped_height));
+        let mut scroll_view = ScrollView::new(Size::new(inner_area.width, wrapped_height))
+            .vertical_scrollbar_visibility(ScrollbarVisibility::Never)
+            .horizontal_scrollbar_visibility(ScrollbarVisibility::Never);
         let paragraph = Paragraph::new(text)
             .wrap(Wrap { trim: true })
             .style(Style::default().bg(BG_COLOR));
@@ -391,7 +398,7 @@ impl App {
     }
 
     fn render_help_page(&self, area: Rect, buf: &mut Buffer) {
-        let area = centered_rect(60, 30, area);
+        let area = centered_rect(70, 30, area);
         Clear.render(area, buf);
         let block = Block::default()
             .title("Help".bold().into_centered_line())
@@ -404,6 +411,9 @@ impl App {
             Line::from("<k>      - Scroll up text"),
             Line::from("<g>      - Scroll to the top of the text"),
             Line::from("<G>      - Scroll to the bottom of the text"),
+            Line::from(
+                "<f>      - follow links. Just type the characters in red next to a link to follow it",
+            ),
             Line::from("<Ctrl-g> - Start editing the url"),
             Line::from("<Esc>    - Stop editing the url"),
             Line::from("<Ctrl-c> - Quit the app"),
