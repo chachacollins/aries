@@ -9,12 +9,12 @@ This is a tui browser for the [gemini protocol](https://en.wikipedia.org/wiki/Ge
 > [!WARNING]
 > This has been tested and used only on linux.
 
-\```bash
+```bash
 git clone --depth=1 https://github.com/chachacollins/aries
 cd aries
 cargo build --release
 cp ./target/release/aries $INSTALFOLDER
-\```
+```
 
 # Help and Documentation
 
